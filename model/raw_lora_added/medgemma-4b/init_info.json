@@ -1,0 +1,12 @@
+{
+  "script": "init_lora_on_raw",
+  "model": "medgemma-4b",
+  "base_model": "google/medgemma-4b-it",
+  "lora_r": 64,
+  "lora_alpha": 128,
+  "include_embeddings": true,
+  "use_rslora": true,
+  "extended_tokenizer": true,
+  "new_tokens_count": 23699,
+  "status": "initialized_not_trained"
+}

@@ -1,0 +1,11 @@
+{
+  "script": "train_01_mixed_data",
+  "model": "medgemma-4b",
+  "phase0_model": "model/00_trained/medgemma-4b",
+  "strategy": "mixed_data_training",
+  "medical_ratio": 0.7,
+  "korean_ratio": 0.30000000000000004,
+  "epochs": 3,
+  "train_samples": 5911,
+  "learning_rate": 5e-05
+}

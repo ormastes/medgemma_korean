@@ -1330,3 +1330,450 @@ Target divisions for annotation:
 - GENERAL: Multi-division or general medical knowledge
 - UNKNOWN: Cannot determine (should be <5%)
 
+---
+
+## Simplified Training Pipeline (script/ & data/)
+
+### Overview
+
+A simplified, self-contained training pipeline using local data. This is an alternative to the full phase-based pipeline for quick experiments and focused training.
+
+### Training Flow
+
+```
+data/01_raw/                  (Raw datasets)
+        ↓
+   Refine scripts
+        ↓
+data/02_refined/              (Training-ready data)
+        ↓
+script/train/train_*.py        (Training scripts)
+        ↓
+models/train_*/                   (Output models)
+```
+
+### Directory Structure
+
+```
+script/
+├── train/
+│   ├── train_00_plain_text.py       # Phase 0: Korean plain text (continued pretraining)
+│   ├── train_01_medical_dict.py     # Phase 1: Medical dictionary learning
+│   ├── train_02_kor_med_test.py     # Phase 2: MCQ with reasoning (KorMedMCQA)
+│   └── train_01_02_loop.py          # Loop training: 01 → 02 → 01 → 02...
+├── training_config.py            # Model configurations (medgemma-4b, medgemma-27b)
+├── training_utils.py             # Shared utilities (LoRA, 8-bit, SFT)
+├── validation_kor_med_test.py    # Standalone KorMedMCQA validation
+├── add_lora_adapter.py           # Utility to add LoRA to base models
+├── check_gpu_memory.py           # GPU memory diagnostic tool
+└── old_versions/                 # Deprecated script versions
+
+data/
+├── 01_raw/
+│   ├── 00_korean/               # Korean plain text sources
+│   │   ├── c4_korean/           # C4 Korean (~3GB, 7 arrow files)
+│   │   ├── namu_wiki/           # NamuWiki (~18GB, 38 arrow files)
+│   │   └── wikipedia-korean/    # Korean Wikipedia (~3GB, 7 arrow files)
+│   ├── 01_medical_dict/         # Medical dictionaries
+│   │   ├── korean_medical_dict.jsonl       # Human medical terms
+│   │   └── korean_animal_medical_dict.jsonl # Veterinary terms
+│   └── 02_kor_med_test/         # KorMedMCQA dataset
+│       ├── train.jsonl          # 1890 training samples
+│       └── test.jsonl           # 604 test samples
+└── 02_refined/
+    ├── 00_plain_text/
+    │   └── train.jsonl          # 1.5GB refined plain text
+    ├── 01_medical_dict.json     # 4049 medical terms
+    ├── 02_char_dict.json        # 89 special symbols
+    └── 02_kor_med_test/
+        ├── train.jsonl          # 1890 refined MCQ samples
+        └── test.jsonl           # 604 test samples
+
+models/
+├── train_00_plain_text/         # Plain text model outputs
+├── train_01_medical_dict/       # Dictionary training outputs
+└── train_02_kor_med_test/       # MCQ training outputs
+```
+
+---
+
+### Training Scripts
+
+#### train/train_00_plain_text.py (Continued Pretraining)
+
+**Purpose:** Learn Korean language patterns from plain text
+
+**Data:** `data/02_refined/00_plain_text/train.jsonl` (~1.5GB)
+
+**Features:**
+- Continued pretraining on Korean text
+- Includes embeddings in LoRA (`include_embeddings=True`)
+- Uses rsLoRA for stable training
+
+```bash
+python script/train/train/train_00_plain_text.py --epochs 1 --max-samples 10000
+```
+
+---
+
+#### train/train_01_medical_dict.py (Medical Dictionary)
+
+**Purpose:** Learn Korean-English medical terminology and special symbols
+
+**Data:**
+- `data/02_refined/01_medical_dict.json` (4049 medical terms)
+- `data/02_refined/02_char_dict.json` (89 special symbols)
+
+**Training Format:**
+```
+<start_of_turn>user
+Meaning of word {term}:<end_of_turn>
+<start_of_turn>model
+{definition}<end_of_turn>
+```
+
+**Validation:** KorMedMCQA test (604 samples)
+
+**Key Features:**
+- Left padding for batch generation
+- `<end_of_turn>` as termination token
+- Periodic KorMedMCQA evaluation during training
+
+```bash
+# Basic training
+python script/train/train/train_01_medical_dict.py --epochs 3
+
+# With custom evaluation interval
+python script/train/train/train_01_medical_dict.py --epochs 3 --show-samples-every 50 --eval-samples 10
+```
+
+**Output:** `models/train_01_medical_dict/medgemma-4b/`
+
+---
+
+#### train/train_02_kor_med_test.py (MCQ with Reasoning)
+
+**Purpose:** Learn to answer medical MCQs with chain-of-thought reasoning
+
+**Data:** `data/02_refined/02_kor_med_test/` (1890 train, 604 test)
+
+**Training Format (95% simple):**
+```
+<start_of_turn>user
+Reasoning 후 정답 알파벳 하나만 답하세요.
+
+{question}
+A) {A}
+B) {B}
+C) {C}
+D) {D}
+E) {E}
+
+<end_of_turn>
+<start_of_turn>model
+<reasoning>
+{reasoning_per_choice}
+</reasoning>{answer}<end_of_turn>
+```
+
+**Training Format (5% detailed):**
+```
+<start_of_turn>user
+Reasoning 후 정답 알파벳 하나만 답하세요.
+
+```format
+...detailed format instruction...
+```
+
+```example
+...full example with reasoning...
+```
+
+{question}
+...
+<end_of_turn>
+<start_of_turn>model
+<reasoning>
+첫째: ...
+둘째: ...
+셋째: ...
+넷째: A) ... xx%, B) ... yy%, ...
+</reasoning>{answer}<end_of_turn>
+```
+
+**Scoring System:**
+- Correct answer: 2/3 weight
+- Reasoning format: 1/3 weight
+- Wrong answer with good reasoning: 1/4 weight
+
+**Reasoning Format Checks:**
+1. `<reasoning>` and `</reasoning>` tags exist
+2. `첫째:`, `둘째:`, `셋째:`, `넷째:` keywords with 3+ words
+3. `A)`, `B)`, `C)`, `D)`, `E)` with 3+ words and `number%`
+
+```bash
+# Basic training
+python script/train/train/train_02_kor_med_test.py --epochs 3
+
+# Use train_01 output as base model
+python script/train/train/train_02_kor_med_test.py \
+    --base-model models/train_01_medical_dict/medgemma-4b/final \
+    --epochs 3
+```
+
+**Output:** `models/train_02_kor_med_test/medgemma-4b/`
+
+---
+
+#### train/train_01_02_loop.py (Loop Training)
+
+**Purpose:** Alternating training between dictionary and MCQ until target accuracy
+
+**Strategy:**
+```
+Loop 1: train_01 (1 epoch) → train_02 (1 epoch) → evaluate
+Loop 2: train_01 (1 epoch) → train_02 (1 epoch) → evaluate
+...
+Stop when KorMedMCQA accuracy ≥ target
+```
+
+```bash
+python script/train/train/train_01_02_loop.py --max-loops 5 --target-accuracy 80
+```
+
+---
+
+### Model Configuration
+
+`training_config.py`:
+```python
+MODEL_CONFIGS = {
+    "medgemma-4b": {
+        "path": "google/medgemma-4b-it",
+        "lora_r": 64,
+        "lora_alpha": 128,
+        "batch": 4,
+        "grad_accum": 4,
+        "lr": 2e-5,
+        "max_length": 512
+    },
+    "medgemma-27b": {
+        "path": "google/medgemma-27b-it",
+        "lora_r": 32,
+        "lora_alpha": 64,
+        "batch": 1,
+        "grad_accum": 16,
+        "lr": 1e-5,
+        "max_length": 512
+    }
+}
+
+LORA_TARGET_MODULES = [
+    "q_proj", "k_proj", "v_proj", "o_proj",
+    "gate_proj", "up_proj", "down_proj"
+]
+```
+
+---
+
+### Quick Start
+
+```bash
+# 1. Train on medical dictionary (builds vocabulary)
+python script/train/train/train_01_medical_dict.py --epochs 3
+
+# 2. Train on MCQ using dictionary-trained model
+python script/train/train/train_02_kor_med_test.py \
+    --base-model models/train_01_medical_dict/medgemma-4b/final \
+    --epochs 3
+
+# 3. (Optional) Loop training for higher accuracy
+python script/train/train/train_01_02_loop.py --max-loops 5
+
+# 4. Validate final model
+python script/validation_kor_med_test.py \
+    --model models/train_02_kor_med_test/medgemma-4b/final
+```
+
+---
+
+### Data Formats
+
+#### Medical Dictionary (`01_medical_dict.json`)
+```json
+[
+  {"term": "고혈압", "definition": "Hypertension. 혈압이 정상 범위보다 높은 상태..."},
+  {"term": "당뇨병", "definition": "Diabetes mellitus. 인슐린 분비 또는 작용 장애..."}
+]
+```
+
+#### Character Dictionary (`02_char_dict.json`)
+```json
+[
+  {"term": "↑", "definition": "increased, elevated, or upward trend"},
+  {"term": "↓", "definition": "decreased, reduced, or downward trend"}
+]
+```
+
+#### KorMedMCQA (`02_kor_med_test/*.jsonl`)
+```json
+{
+  "question": "광역시 소재 대학병원에 소속된 내과 전문의...",
+  "A": "병원장에게 보고",
+  "B": "광역시장에게 신고",
+  "C": "질병관리청장에게 신고",
+  "D": "관할 보건소장에게 신고",
+  "E": "보건복지부장관에게 신고",
+  "answer": "D"
+}
+```
+
+---
+
+### Training Output
+
+Each training creates:
+```
+models/train_XX_name/medgemma-4b/
+├── checkpoint-N/           # Epoch checkpoints
+├── final/                  # Final model (LoRA adapter)
+│   ├── adapter_config.json
+│   ├── adapter_model.safetensors
+│   └── tokenizer files
+├── training_info.json      # Training metadata
+└── README.md               # Auto-generated summary
+```
+
+**training_info.json example:**
+```json
+{
+  "script": "train_01_medical_dict",
+  "model": "medgemma-4b",
+  "base_model": "google/medgemma-4b-it",
+  "epochs": 3,
+  "train_samples": 4138,
+  "validation_samples": 604,
+  "validation_history": [
+    {"step": 100, "accuracy": 50.0, "correct": 5, "total": 10}
+  ],
+  "final_accuracy": 50.0
+}
+```
+
+---
+
+### Common Options
+
+All training scripts support:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--model` | `medgemma-4b` | Model to train (`medgemma-4b` or `medgemma-27b`) |
+| `--epochs` | `3` | Number of training epochs |
+| `--max-samples` | `None` | Limit training samples (for testing) |
+| `--base-model` | `None` | Override base model path |
+| `--output` | `None` | Override output directory |
+| `--device` | `cuda:0` | Training device |
+| `--show-samples-every` | `50` | Validation interval (steps) |
+| `--eval-samples` | `10` | Number of validation samples |
+
+---
+
+### GPU Requirements
+
+| Model | VRAM Required | Batch Size | Time per Epoch |
+|-------|---------------|------------|----------------|
+| medgemma-4b | ~12GB (8-bit) | 4 | ~40 min |
+| medgemma-27b | ~28GB (8-bit) | 1 | ~4 hours |
+
+**Recommended Setup:**
+- RTX A6000 (48GB): Can run medgemma-27b comfortably
+- RTX 4090 (24GB): medgemma-4b with full batch, medgemma-27b with reduced batch
+- TITAN RTX (24GB): medgemma-4b recommended
+
+---
+
+## Current Training Status (Updated: 2025-12-22)
+
+### Pipeline Status
+
+| Step | Script | Status | Notes |
+|------|--------|--------|-------|
+| Step 1/4 | train/train_00_plain_text.py | IN PROGRESS | Plain text Korean training |
+| Step 2/4 | train/train_01_with_00_monitor.py | PENDING | Medical dictionary with monitoring |
+| Step 3/4 | add_lora_adapter.py | PENDING | Add second LoRA adapter |
+| Step 4/4 | train/train_02_kor_med_test.py | PENDING | MCQ with reasoning |
+
+### Recent Fixes Applied (2025-12-22)
+
+1. **LoRA Config Fix**: Changed `target_modules` to `modules_to_save` for embeddings
+   - Embeddings require `modules_to_save` for 8-bit quantized models
+   - Fixed in `training_utils.py:create_lora_config()`
+
+2. **Trainable Parameters Fix**: Added `is_trainable=True` to `PeftModel.from_pretrained()`
+   - Without this, adapter loads in inference mode (0% trainable)
+   - Fixed in train_00, train_01, train_02 scripts
+
+3. **Memory Optimization**: Enabled gradient checkpointing for medgemma-4b
+   - Extended tokenizer embeddings (1.59B trainable params) require more memory
+   - Reduced batch size: 4 → 2, grad_accum: 8 → 16
+
+### Memory Configuration
+
+```python
+MEMORY_CONFIGS = {
+    "medgemma-4b": {
+        "use_gradient_checkpointing": True,   # Required with extended embeddings
+        "train_embeddings": True,              # Train Korean embeddings
+        "batch": 2,                            # Reduced from 4
+        "grad_accum": 16,                      # Increased from 8
+    },
+    "medgemma-27b": {
+        "use_gradient_checkpointing": True,   # Required
+        "train_embeddings": False,             # OOM with embeddings
+    }
+}
+```
+
+### Extended Tokenizer
+
+- **New Korean tokens:** 23,699
+- **Vocab size:** 262,208 → 285,844
+- **Trainable params with embeddings:** 1.59B (26.78%)
+
+### Monitoring Commands
+
+```bash
+# Check progress
+cat /home/ormastes/dev/pub/medgemma_korean/logs/progress_medgemma-4b.txt
+
+# Watch live log
+tail -f /home/ormastes/dev/pub/medgemma_korean/logs/pipeline_medgemma-4b.log
+
+# Stop training
+kill $(cat /home/ormastes/dev/pub/medgemma_korean/logs/pipeline_medgemma-4b.pid)
+```
+
+### Run Pipeline
+
+```bash
+# Start training (background)
+./run_full_pipeline.sh --model medgemma-4b --background
+
+# With options
+./run_full_pipeline.sh --model medgemma-4b --epochs-00 1 --epochs-01 3 --epochs-02 5 --background
+
+# Skip specific steps
+./run_full_pipeline.sh --model medgemma-4b --skip-00 --background
+```
+
+### Output Directories
+
+```
+model/
+├── raw_lora_added/medgemma-4b/     # Initial LoRA (untrained)
+├── 00_trained/medgemma-4b/          # After train_00
+├── 01_trained/medgemma-4b/          # After train_01
+├── 01_another_lora_added/medgemma-4b/  # After adding 2nd LoRA
+└── 02_trained/medgemma-4b/          # After train_02 (final)
+```

@@ -1,0 +1,12 @@
+{
+  "script": "train_02_mixed_data",
+  "model": "medgemma-4b",
+  "phase1_model": "model/01_mixed/medgemma-4b/final",
+  "strategy": "mixed_data_training",
+  "mcq_ratio": 0.7,
+  "medical_ratio": 0.30000000000000004,
+  "epochs": 5,
+  "train_samples": 2700,
+  "max_length": 1024,
+  "learning_rate": 3e-05
+}

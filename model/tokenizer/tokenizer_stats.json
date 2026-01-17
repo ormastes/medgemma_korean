@@ -1,0 +1,9 @@
+{
+  "original_vocab_size": 262145,
+  "new_vocab_size": 285844,
+  "tokens_added": 23699,
+  "dict_terms_count": 6072,
+  "train02_words_count": 19551,
+  "corpus_words_used": 0,
+  "tokenization_improvement": 1.2580645161290323
+}
