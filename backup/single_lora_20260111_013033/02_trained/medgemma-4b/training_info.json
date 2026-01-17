@@ -1,0 +1,24 @@
+{
+  "script": "train_02_kor_med_test",
+  "model": "medgemma-4b",
+  "base_model": "/home/ormastes/dev/pub/medgemma_korean/model/01_trained/medgemma-4b",
+  "epochs": 3,
+  "max_length": 1024,
+  "full_samples": 500,
+  "reasoning_threshold": 0.7,
+  "train_samples": 1890,
+  "validation_samples": 604,
+  "history": [
+    {
+      "step": 50,
+      "mode": "normal",
+      "accuracy": 20.0,
+      "reasoning_score": 0.5999999999999999,
+      "combined_score": 0.2933333333333333,
+      "correct": 2,
+      "total": 10
+    }
+  ],
+  "final_reasoning_score": 0.5999999999999999,
+  "final_accuracy": 20.0
+}

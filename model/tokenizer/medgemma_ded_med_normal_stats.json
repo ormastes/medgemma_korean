@@ -1,0 +1,9 @@
+{
+  "variant": "medgemma_ded_med_normal (Full)",
+  "base_model": "google/medgemma-4b-it",
+  "original_vocab_size": 262145,
+  "new_vocab_size": 282738,
+  "tokens_added": 20593,
+  "candidate_tokens": 23044,
+  "already_existed": 2451
+}

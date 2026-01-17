@@ -1,0 +1,8 @@
+Started: 2025-12-26 10:04:29
+Process: demo_training_test-model
+----------------------------------------
+[10:04:29] Step 100: loss=0.5000, accuracy=75.0000
+[10:04:29] Step 200: loss=0.3000, accuracy=82.0000
+[10:04:29] Epoch 1 complete: val_loss=0.4000, val_accuracy=80.0000
+[10:04:29] Validation: kormedmcqa_accuracy=78.5000
+[10:04:29] FINISHED - Duration: 0h 0m 0s

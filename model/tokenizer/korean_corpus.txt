@@ -1,0 +1,1 @@
+/home/ormastes/dev/pub/medgemma_korean/data/raw/korean_corpus_for_tokenizer.txt

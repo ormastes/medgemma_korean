@@ -1,0 +1,74 @@
+{
+  "model": "medgemma-4b",
+  "epochs": 10,
+  "best_accuracy": 23.67549668874172,
+  "history": [
+    {
+      "epoch": 0,
+      "accuracy": 16.55629139072848,
+      "correct": 100,
+      "total": 604
+    },
+    {
+      "epoch": 1,
+      "accuracy": 23.67549668874172,
+      "correct": 143,
+      "total": 604
+    },
+    {
+      "epoch": 2,
+      "accuracy": 22.185430463576157,
+      "correct": 134,
+      "total": 604
+    },
+    {
+      "epoch": 3,
+      "accuracy": 20.198675496688743,
+      "correct": 122,
+      "total": 604
+    },
+    {
+      "epoch": 4,
+      "accuracy": 22.019867549668874,
+      "correct": 133,
+      "total": 604
+    },
+    {
+      "epoch": 5,
+      "accuracy": 20.033112582781456,
+      "correct": 121,
+      "total": 604
+    },
+    {
+      "epoch": 6,
+      "accuracy": 23.344370860927153,
+      "correct": 141,
+      "total": 604
+    },
+    {
+      "epoch": 7,
+      "accuracy": 20.52980132450331,
+      "correct": 124,
+      "total": 604
+    },
+    {
+      "epoch": 8,
+      "accuracy": 21.52317880794702,
+      "correct": 130,
+      "total": 604
+    },
+    {
+      "epoch": 9,
+      "accuracy": 21.026490066225165,
+      "correct": 127,
+      "total": 604
+    },
+    {
+      "epoch": 10,
+      "accuracy": 20.198675496688743,
+      "correct": 122,
+      "total": 604
+    }
+  ],
+  "loss_masking": "completion_only_loss=True"
+}

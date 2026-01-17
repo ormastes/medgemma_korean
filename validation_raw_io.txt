@@ -1,0 +1,390 @@
+================================================================================
+RAW VALIDATION INPUT/OUTPUT
+================================================================================
+
+--- Sample 1 ---
+Expected Answer: A
+
+[INPUT PROMPT]
+<start_of_turn>user
+question:
+다음 중 당뇨병성 케톤산증(DKA) 초기 처치로 가장 적절한 것은?
+A) 포도당 수액을 먼저 투여한다
+B) 인슐린 정주를 먼저 시작하고 수액은 나중에 한다
+C) 0.9% 생리식염수로 수액을 먼저 시작한다
+D) 중탄산나트륨을 모든 경우에 즉시 투여한다
+E) 칼륨은 절대 보충하지 않는다
+answer_type:
+select_A_E
+remind:
+Answer must be exactly one character: A, B, C, D, or E.
+translate:
+<end_of_turn>
+<start_of_turn>model
+Which initial management is most appropriate for DKA?
+A) Administer glucose solution first
+B) Start insulin IV first, fluids later
+C) Start fluids with 0.9% normal saline first
+D) Give sodium bicarbonate immediately in all cases
+E) Never supplement potassium
+reasoning:
+facts:
+- Initial DKA management prioritizes isotonic fluid resuscitation.
+candidates:
+- A, B, C, D, E
+criteria:
+- Initial priority (hemodynamics)
+- Guideline consistency
+- Avoid unsafe blanket rules
+analysis:
+Fluids first with 0.9% NS is the standard initial step.
+evaluation:
+- 평가기준: 초기 우선순위(수액), 안전성, 가이드라인 부합
+- 점수표: A=0, B=0, C=3, D=0, E=0
+- 근거요약: A(초기 우선순위 아님); B(수액 없이 인슐린은 위험); C(표준 초기 수액); D(중탄산은 제한적); E(K+는 모니터링 후 필요 시 보충)
+answer:
+C<end_of_turn>
+<start_of_turn>user
+The answer is C. Start 0.9% NS fluid first.
+question:
+광역시 소재 대학병원에 소속된 내과 전문의 A가 콜레라 환자를 진단했다. A가 할 조치는?
+A) 병원장에게 보고
+B) 광역시장에게 신고
+C) 질병관리청장에게 신고
+D) 관할 보건소장에게 신고
+E) 보건복지부장관에게 신고
+answer_type:
+select_A_E
+remind:
+Answer must be exactly one character: A, B, C, D, or E.
+translate:
+<end_of_turn>
+<start_of_turn>model
+
+
+[RAW OUTPUT (repr)]
+'What should the ER doctor do?\nA) Call the  municípios \nB) Call the city health officer \nC) Call the health authority \nD) Call the nearest hospital \nE) Call the attending physician \nAnswer must be exactly one character: A, B, C, D, or E.\n\nDKA<eos>'
+
+[DECODED OUTPUT]
+What should the ER doctor do?
+A) Call the  municípios 
+B) Call the city health officer 
+C) Call the health authority 
+D) Call the nearest hospital 
+E) Call the attending physician 
+Answer must be exactly one character: A, B, C, D, or E.
+
+DKA<eos>
+
+
+--- Sample 2 ---
+Expected Answer: C
+
+[INPUT PROMPT]
+<start_of_turn>user
+question:
+다음 중 당뇨병성 케톤산증(DKA) 초기 처치로 가장 적절한 것은?
+A) 포도당 수액을 먼저 투여한다
+B) 인슐린 정주를 먼저 시작하고 수액은 나중에 한다
+C) 0.9% 생리식염수로 수액을 먼저 시작한다
+D) 중탄산나트륨을 모든 경우에 즉시 투여한다
+E) 칼륨은 절대 보충하지 않는다
+answer_type:
+select_A_E
+remind:
+Answer must be exactly one character: A, B, C, D, or E.
+translate:
+<end_of_turn>
+<start_of_turn>model
+Which initial management is most appropriate for DKA?
+A) Administer glucose solution first
+B) Start insulin IV first, fluids later
+C) Start fluids with 0.9% normal saline first
+D) Give sodium bicarbonate immediately in all cases
+E) Never supplement potassium
+reasoning:
+facts:
+- Initial DKA management prioritizes isotonic fluid resuscitation.
+candidates:
+- A, B, C, D, E
+criteria:
+- Initial priority (hemodynamics)
+- Guideline consistency
+- Avoid unsafe blanket rules
+analysis:
+Fluids first with 0.9% NS is the standard initial step.
+evaluation:
+- 평가기준: 초기 우선순위(수액), 안전성, 가이드라인 부합
+- 점수표: A=0, B=0, C=3, D=0, E=0
+- 근거요약: A(초기 우선순위 아님); B(수액 없이 인슐린은 위험); C(표준 초기 수액); D(중탄산은 제한적); E(K+는 모니터링 후 필요 시 보충)
+answer:
+C<end_of_turn>
+<start_of_turn>user
+The answer is C. Start 0.9% NS fluid first.
+question:
+A는 제1급 감염병으로 진단을 받았다. B는 마스크를 착용하지 않은 채 A와 밀접하게 접촉했다. B는 증상이 없다. 역학조사관은 이 단계에서 B를 무엇으로 분류하는가?
+A) 감염병 환자
+B) 병원체 보유자
+C) 감염병 의심자
+D) 감염병 확진자
+E) 감염병 의사환자
+answer_type:
+select_A_E
+remind:
+Answer must be exactly one character: A, B, C, D, or E.
+translate:
+<end_of_turn>
+<start_of_turn>model
+
+
+[RAW OUTPUT (repr)]
+'The answer is C. Start 0.9% NS fluid first.\n질병<eos>'
+
+[DECODED OUTPUT]
+The answer is C. Start 0.9% NS fluid first.
+질병<eos>
+
+
+--- Sample 3 ---
+Expected Answer: A
+
+[INPUT PROMPT]
+<start_of_turn>user
+question:
+다음 중 당뇨병성 케톤산증(DKA) 초기 처치로 가장 적절한 것은?
+A) 포도당 수액을 먼저 투여한다
+B) 인슐린 정주를 먼저 시작하고 수액은 나중에 한다
+C) 0.9% 생리식염수로 수액을 먼저 시작한다
+D) 중탄산나트륨을 모든 경우에 즉시 투여한다
+E) 칼륨은 절대 보충하지 않는다
+answer_type:
+select_A_E
+remind:
+Answer must be exactly one character: A, B, C, D, or E.
+translate:
+<end_of_turn>
+<start_of_turn>model
+Which initial management is most appropriate for DKA?
+A) Administer glucose solution first
+B) Start insulin IV first, fluids later
+C) Start fluids with 0.9% normal saline first
+D) Give sodium bicarbonate immediately in all cases
+E) Never supplement potassium
+reasoning:
+facts:
+- Initial DKA management prioritizes isotonic fluid resuscitation.
+candidates:
+- A, B, C, D, E
+criteria:
+- Initial priority (hemodynamics)
+- Guideline consistency
+- Avoid unsafe blanket rules
+analysis:
+Fluids first with 0.9% NS is the standard initial step.
+evaluation:
+- 평가기준: 초기 우선순위(수액), 안전성, 가이드라인 부합
+- 점수표: A=0, B=0, C=3, D=0, E=0
+- 근거요약: A(초기 우선순위 아님); B(수액 없이 인슐린은 위험); C(표준 초기 수액); D(중탄산은 제한적); E(K+는 모니터링 후 필요 시 보충)
+answer:
+C<end_of_turn>
+<start_of_turn>user
+The answer is C. Start 0.9% NS fluid first.
+question:
+검역소 내 격리병동에 격리되어 있던 콜레라 환자 A의 감염력이 없어진 것이 확인되었다. A에 대한 조치는?
+A) 격리 해제
+B) 1일 뒤에 다시 검사 후 격리해제 결정
+C) 1주 뒤에 다시 검사 후 격리해제 결정
+D) 거주지를 관할하는 보건소로 이동하여 격리
+E) 거주지를 관할하는 감염병전문병원으로 이동하여 격리
+answer_type:
+select_A_E
+remind:
+Answer must be exactly one character: A, B, C, D, or E.
+translate:
+<end_of_turn>
+<start_of_turn>model
+
+
+[RAW OUTPUT (repr)]
+'The answer is B. \nDKA 환자의 경우 뇌척수액 검사 결과 1~7일 뒤에 다시 검사 후 격리해제 결정.<eos>'
+
+[DECODED OUTPUT]
+The answer is B. 
+DKA 환자의 경우 뇌척수액 검사 결과 1~7일 뒤에 다시 검사 후 격리해제 결정.<eos>
+
+
+--- Sample 4 ---
+Expected Answer: D
+
+[INPUT PROMPT]
+<start_of_turn>user
+question:
+다음 중 당뇨병성 케톤산증(DKA) 초기 처치로 가장 적절한 것은?
+A) 포도당 수액을 먼저 투여한다
+B) 인슐린 정주를 먼저 시작하고 수액은 나중에 한다
+C) 0.9% 생리식염수로 수액을 먼저 시작한다
+D) 중탄산나트륨을 모든 경우에 즉시 투여한다
+E) 칼륨은 절대 보충하지 않는다
+answer_type:
+select_A_E
+remind:
+Answer must be exactly one character: A, B, C, D, or E.
+translate:
+<end_of_turn>
+<start_of_turn>model
+Which initial management is most appropriate for DKA?
+A) Administer glucose solution first
+B) Start insulin IV first, fluids later
+C) Start fluids with 0.9% normal saline first
+D) Give sodium bicarbonate immediately in all cases
+E) Never supplement potassium
+reasoning:
+facts:
+- Initial DKA management prioritizes isotonic fluid resuscitation.
+candidates:
+- A, B, C, D, E
+criteria:
+- Initial priority (hemodynamics)
+- Guideline consistency
+- Avoid unsafe blanket rules
+analysis:
+Fluids first with 0.9% NS is the standard initial step.
+evaluation:
+- 평가기준: 초기 우선순위(수액), 안전성, 가이드라인 부합
+- 점수표: A=0, B=0, C=3, D=0, E=0
+- 근거요약: A(초기 우선순위 아님); B(수액 없이 인슐린은 위험); C(표준 초기 수액); D(중탄산은 제한적); E(K+는 모니터링 후 필요 시 보충)
+answer:
+C<end_of_turn>
+<start_of_turn>user
+The answer is C. Start 0.9% NS fluid first.
+question:
+A 의원 B 원장은 요양급여비용 지급과 관련된 국민건강보험공단의 처분에 대해 이의신청을 했다. B는 이의신청에 대한 국민건강보험공단 결정에 불복하여 심판청구를 하려고 한다. B가 심판청구를 할 수 있는 곳은?
+A) 관할 시도지사
+B) 건강보험심사평가원
+C) 의료분쟁조정중재원
+D) 건강보험분쟁조정위원회
+E) 건강보험정책심의위원회
+answer_type:
+select_A_E
+remind:
+Answer must be exactly one character: A, B, C, D, or E.
+translate:
+<end_of_turn>
+<start_of_turn>model
+
+
+[RAW OUTPUT (repr)]
+'The answer is C. The मर्रा is the 1st place to make an objection to the 결정 of the मर्रा.\n질문 1: \n질문 2: \n질문 3: \n질문 4: \n질문 5: \n질문 6: \n질문 7: \n질문 8: \n질문 9: \n질문 10: \n질문 11: \n질문 12: \n질문 13: \n질문 14: \n질문 15: \n질문 16: \n질문 '
+
+[DECODED OUTPUT]
+The answer is C. The मर्रा is the 1st place to make an objection to the 결정 of the मर्रा.
+질문 1: 
+질문 2: 
+질문 3: 
+질문 4: 
+질문 5: 
+질문 6: 
+질문 7: 
+질문 8: 
+질문 9: 
+질문 10: 
+질문 11: 
+질문 12: 
+질문 13: 
+질문 14: 
+질문 15: 
+질문 16: 
+질문 
+
+
+--- Sample 5 ---
+Expected Answer: B
+
+[INPUT PROMPT]
+<start_of_turn>user
+question:
+다음 중 당뇨병성 케톤산증(DKA) 초기 처치로 가장 적절한 것은?
+A) 포도당 수액을 먼저 투여한다
+B) 인슐린 정주를 먼저 시작하고 수액은 나중에 한다
+C) 0.9% 생리식염수로 수액을 먼저 시작한다
+D) 중탄산나트륨을 모든 경우에 즉시 투여한다
+E) 칼륨은 절대 보충하지 않는다
+answer_type:
+select_A_E
+remind:
+Answer must be exactly one character: A, B, C, D, or E.
+translate:
+<end_of_turn>
+<start_of_turn>model
+Which initial management is most appropriate for DKA?
+A) Administer glucose solution first
+B) Start insulin IV first, fluids later
+C) Start fluids with 0.9% normal saline first
+D) Give sodium bicarbonate immediately in all cases
+E) Never supplement potassium
+reasoning:
+facts:
+- Initial DKA management prioritizes isotonic fluid resuscitation.
+candidates:
+- A, B, C, D, E
+criteria:
+- Initial priority (hemodynamics)
+- Guideline consistency
+- Avoid unsafe blanket rules
+analysis:
+Fluids first with 0.9% NS is the standard initial step.
+evaluation:
+- 평가기준: 초기 우선순위(수액), 안전성, 가이드라인 부합
+- 점수표: A=0, B=0, C=3, D=0, E=0
+- 근거요약: A(초기 우선순위 아님); B(수액 없이 인슐린은 위험); C(표준 초기 수액); D(중탄산은 제한적); E(K+는 모니터링 후 필요 시 보충)
+answer:
+C<end_of_turn>
+<start_of_turn>user
+The answer is C. Start 0.9% NS fluid first.
+question:
+종합병원의 병원장이 적법하게 흡연실을 설치할 수 있는 방법은?
+A) 병원 한 개 층 전체를 흡연병동으로 지정
+B) 병원건물 옥상에 냉방장비가 구비된 흡연실 설치
+C) 병원건물 최상층 휴게실에 환기장치를 설비하고 흡연실로 지정
+D) 병원건물 출입구로부터 5미터 떨어진 택시승강장 앞에 흡연실 설치
+E) 음압병실을 개조하여 거동이 불편한 환자만 이용하는 흡연실로 지정
+answer_type:
+select_A_E
+remind:
+Answer must be exactly one character: A, B, C, D, or E.
+translate:
+<end_of_turn>
+<start_of_turn>model
+
+
+[RAW OUTPUT (repr)]
+'How can a hospital install a smoking room?\nA) Designate an entire floor of the hospital as a smoking room.\nB) Install a smoking room with air-conditioning on the top floor of the hospital building.\nC) Install a smoking room with a water-proof system in the top floor of the hospital building.\nD) Install a smoking room in the taxi stand outside the hospital building.\nE) Designate a smoking room that is converted from a soundproof room and only used by patients with mobility issues.\n호흡기\n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n '
+
+[DECODED OUTPUT]
+How can a hospital install a smoking room?
+A) Designate an entire floor of the hospital as a smoking room.
+B) Install a smoking room with air-conditioning on the top floor of the hospital building.
+C) Install a smoking room with a water-proof system in the top floor of the hospital building.
+D) Install a smoking room in the taxi stand outside the hospital building.
+E) Designate a smoking room that is converted from a soundproof room and only used by patients with mobility issues.
+호흡기
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
