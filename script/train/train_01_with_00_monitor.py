@@ -40,10 +40,10 @@ from torch.utils.data import DataLoader
 
 sys.path.insert(0, str(Path(__file__).parent))
 from training_utils import (
-    create_base_parser, load_tokenizer, load_jsonl_data,
+    create_base_parser, load_tokenizer, load_jsonl_data, load_or_create_cached_dataset,
     create_training_args, save_training_info
 )
-from training_config import MODEL_CONFIGS, MEMORY_CONFIGS
+from training_config import MODEL_CONFIGS, MEMORY_CONFIGS, LORA_TARGET_MODULES
 from trl import SFTTrainer
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig, TrainingArguments
 from peft import PeftModel, PeftConfig, get_peft_model, LoraConfig
@@ -123,9 +123,11 @@ def get_input_model_path(model_name: str) -> str:
     raise ValueError(f"Model not found: {input_path}\nRun train_00 first!")
 
 
-def load_train_00_data(max_samples: int = None) -> list:
-    """Load train_00 plain text data."""
-    train_data, _ = load_jsonl_data(TRAIN_00_DATA_DIR, max_samples=max_samples)
+def load_train_00_data(tokenizer, max_samples: int = None) -> list:
+    """Load train_00 plain text data (with caching)."""
+    train_data, _ = load_or_create_cached_dataset(
+        TRAIN_00_DATA_DIR, tokenizer, max_samples=max_samples, skip_cache=False
+    )
     log(f"Loaded {len(train_data)} train_00 samples", "INFO")
     return train_data
 
@@ -519,11 +521,12 @@ def merge_and_add_new_lora(model_path: str, output_path: str, cfg: dict):
     model = PeftModel.from_pretrained(base_model, model_path)
     model = model.merge_and_unload()
 
+    # Use attention-only LoRA (9.2M params @ r=16) instead of full LoRA (120M params @ r=64)
+    # This is 13x smaller and follows research/00__lora_size_calc.md recommendations
     new_lora_config = LoraConfig(
         r=cfg['lora_r'],
         lora_alpha=cfg['lora_alpha'],
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                       "gate_proj", "up_proj", "down_proj"],
+        target_modules=LORA_TARGET_MODULES,  # Attention-only (Q/K/V/O)
         lora_dropout=0.05,
         bias="none",
         task_type="CAUSAL_LM"
@@ -584,8 +587,11 @@ def main():
     else:
         model_path = get_input_model_path(args.model)
 
-    # Load all data
-    train_00_data = load_train_00_data(max_samples=args.max_samples)
+    # Load tokenizer FIRST (needed for dataset caching)
+    tokenizer = load_tokenizer(model_path)
+
+    # Load all data (with caching via tokenizer)
+    train_00_data = load_train_00_data(tokenizer, max_samples=args.max_samples)
     train_01_data = load_train_01_data(max_samples=args.max_samples)
     kormedmcqa_data = load_kormedmcqa_data(max_samples=100)
 
@@ -598,8 +604,6 @@ def main():
     peft_config = PeftConfig.from_pretrained(model_path)
     base_model_path = peft_config.base_model_name_or_path
     log(f"Base model: {base_model_path}", "DEBUG")
-
-    tokenizer = load_tokenizer(model_path)
 
     # Check memory config for gradient checkpointing
     from peft import prepare_model_for_kbit_training

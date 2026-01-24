@@ -1,0 +1,9 @@
+{
+  "variant": "medgemma_dedicated (Special + User + Dictionary)",
+  "base_model": "google/medgemma-4b-it",
+  "original_vocab_size": 262145,
+  "new_vocab_size": 266819,
+  "tokens_added": 4674,
+  "candidate_tokens": 4718,
+  "already_existed": 44
+}

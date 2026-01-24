@@ -28,17 +28,19 @@ from transformers import TrainerCallback
 
 sys.path.insert(0, str(Path(__file__).parent))
 from training_utils import (
-    create_base_parser, load_jsonl_data, setup_model_with_lora,
+    create_base_parser, load_jsonl_data, load_or_create_cached_dataset, setup_model_with_lora,
     create_training_args, save_training_info, load_tokenizer
 )
 from training_config import MODEL_CONFIGS
 from data_validation import validate_and_report
+from _train_text_format import MCQ_VALIDATE_TEMPLATE
+from _validation import validate_mcq_output, validate_mcq_fields
 from trl import SFTTrainer
 
 # Default max length
 DEFAULT_MAX_LENGTH = 512
 
-BASE_DIR = Path(__file__).parent.parent
+BASE_DIR = Path(__file__).parent.parent.parent
 
 # Data paths
 DATA_DIR = BASE_DIR / "data" / "02_refined" / "00_plain_text"
@@ -50,11 +52,12 @@ RAW_LORA_DIR = BASE_DIR / "model" / "raw_lora_added"  # Input: base + LoRA initi
 TRAINING_DIR = BASE_DIR / "model" / "00_training"
 TRAINED_DIR = BASE_DIR / "model" / "00_trained"
 
-# Log file
+# Log files
 LOG_FILE = TRAINING_DIR / "train_00_debug.log"
+VAL_LOG_FILE = TRAINING_DIR / "train_00_validation.log"
 
 
-def log(msg: str, level: str = "INFO"):
+def log(msg: str, level: str = "INFO", to_val: bool = False):
     """Write debug log with timestamp"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_msg = f"[{timestamp}] [{level}] {msg}"
@@ -64,7 +67,25 @@ def log(msg: str, level: str = "INFO"):
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
             f.write(log_msg + "\n")
+
+        # Also write to validation log if requested
+        if to_val:
+            with open(VAL_LOG_FILE, 'a', encoding='utf-8') as f:
+                f.write(log_msg + "\n")
     except Exception as e:
+        pass
+
+
+def log_val(msg: str, level: str = "VAL"):
+    """Write to validation log only"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_msg = f"[{timestamp}] [{level}] {msg}"
+
+    try:
+        VAL_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(VAL_LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(log_msg + "\n")
+    except:
         pass
 
 
@@ -140,19 +161,15 @@ def load_test_data(filepath: Path, max_samples: int = None) -> list:
 
 
 def format_prompt(sample: dict) -> str:
-    """Format MCQ question as prompt."""
-    question = sample['question']
-    choices = f"A) {sample['A']}\nB) {sample['B']}\nC) {sample['C']}\nD) {sample['D']}\nE) {sample['E']}"
-
-    prompt = f"""<start_of_turn>user
-{question}
-
-{choices}
-
-정답 알파벳만 답하세요 (A, B, C, D, E 중 하나).<end_of_turn>
-<start_of_turn>model
-"""
-    return prompt
+    """Format MCQ question as prompt using template from _train_text_format.py."""
+    return MCQ_VALIDATE_TEMPLATE.format(
+        question=sample['question'],
+        A=sample['A'],
+        B=sample['B'],
+        C=sample['C'],
+        D=sample['D'],
+        E=sample['E']
+    )
 
 
 def extract_answer(response: str) -> str:
@@ -164,14 +181,29 @@ def extract_answer(response: str) -> str:
     return response[:1] if response else ""
 
 
-def evaluate_kormedmcqa(model, tokenizer, test_data: list, device: str) -> dict:
-    """Evaluate model on KorMedMCQA test data."""
+def evaluate_kormedmcqa(model, tokenizer, test_data: list, device: str,
+                        max_new_tokens: int = 300, log_details: bool = True) -> dict:
+    """
+    Evaluate model on KorMedMCQA test data with format validation.
+
+    Returns:
+        Dict with accuracy, format_valid_count, avg_format_score, avg_total_score
+    """
     model.eval()
     correct = 0
     total = 0
+    format_valid_count = 0
+    total_format_score = 0.0
+    total_score_sum = 0.0
+
+    # Get end_of_turn token id for stopping
+    end_of_turn_id = tokenizer.convert_tokens_to_ids("<end_of_turn>")
+    terminators = [tokenizer.eos_token_id]
+    if end_of_turn_id != tokenizer.unk_token_id:
+        terminators.append(end_of_turn_id)
 
     with torch.no_grad():
-        for sample in tqdm(test_data, desc="Evaluating KorMedMCQA", leave=False):
+        for i, sample in enumerate(tqdm(test_data, desc="Evaluating KorMedMCQA", leave=False)):
             prompt = format_prompt(sample)
             expected = sample['answer']
 
@@ -180,26 +212,58 @@ def evaluate_kormedmcqa(model, tokenizer, test_data: list, device: str) -> dict:
 
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=5,
+                max_new_tokens=max_new_tokens,
                 do_sample=False,
                 pad_token_id=tokenizer.pad_token_id,
-                eos_token_id=tokenizer.eos_token_id,
+                eos_token_id=terminators,
             )
 
-            response = tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
-            predicted = extract_answer(response)
+            response = tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=False)
 
-            if predicted == expected:
+            # Truncate at end_of_turn
+            if "<end_of_turn>" in response:
+                response = response.split("<end_of_turn>")[0]
+
+            # Validate using _validation.py
+            val_result = validate_mcq_output(response, expected)
+            field_result = validate_mcq_fields(response)
+
+            if val_result['is_correct']:
                 correct += 1
+            if val_result['format_valid']:
+                format_valid_count += 1
+
+            total_format_score += val_result['format_score']
+            total_score_sum += val_result['total_score']
             total += 1
 
+            # Log to validation file
+            if log_details:
+                log_val(f"sample={i} expected={expected} extracted={val_result['extracted_answer']} "
+                       f"format={val_result['format_valid']} correct={val_result['is_correct']} "
+                       f"score={val_result['total_score']:.3f} "
+                       f"fields={len(field_result['fields_found'])}/8")
+
     model.train()
+
     accuracy = correct / total * 100 if total > 0 else 0
-    return {"accuracy": accuracy, "correct": correct, "total": total}
+    format_rate = format_valid_count / total * 100 if total > 0 else 0
+    avg_format_score = total_format_score / total if total > 0 else 0
+    avg_total_score = total_score_sum / total if total > 0 else 0
+
+    return {
+        "accuracy": accuracy,
+        "correct": correct,
+        "total": total,
+        "format_valid_count": format_valid_count,
+        "format_valid_rate": format_rate,
+        "avg_format_score": avg_format_score,
+        "avg_total_score": avg_total_score,
+    }
 
 
 class KorMedMCQAValidationCallback(TrainerCallback):
-    """Callback to validate on KorMedMCQA after each epoch."""
+    """Callback to validate on KorMedMCQA after each epoch with format scoring."""
 
     def __init__(self, tokenizer, test_data, device, results_list):
         self.tokenizer = tokenizer
@@ -211,20 +275,42 @@ class KorMedMCQAValidationCallback(TrainerCallback):
     def on_epoch_end(self, args, state, control, model=None, **kwargs):
         self.current_epoch += 1
         log(f"Epoch {self.current_epoch} completed - Running KorMedMCQA validation...", "INFO")
+        log_val(f"=== Epoch {self.current_epoch} Validation ===")
 
-        result = evaluate_kormedmcqa(model, self.tokenizer, self.test_data, self.device)
+        result = evaluate_kormedmcqa(model, self.tokenizer, self.test_data, self.device, log_details=True)
         result["epoch"] = self.current_epoch
         result["step"] = state.global_step
         self.results_list.append(result)
 
-        log(f"KorMedMCQA Accuracy: {result['accuracy']:.2f}% ({result['correct']}/{result['total']})", "INFO")
+        # Log accuracy
+        log(f"KorMedMCQA Accuracy: {result['accuracy']:.2f}% ({result['correct']}/{result['total']})", "INFO", to_val=True)
+
+        # Log format scores
+        log(f"Format Valid: {result['format_valid_count']}/{result['total']} ({result['format_valid_rate']:.1f}%)", "INFO", to_val=True)
+        log(f"Avg Format Score: {result['avg_format_score']:.3f}", "INFO", to_val=True)
+        log(f"Avg Total Score: {result['avg_total_score']:.3f}", "INFO", to_val=True)
 
         if len(self.results_list) > 1:
             prev = self.results_list[-2]["accuracy"]
             change = result["accuracy"] - prev
             symbol = "+" if change >= 0 else ""
-            log(f"Change from previous: {symbol}{change:.2f}%", "INFO")
+            log(f"Change from previous: {symbol}{change:.2f}%", "INFO", to_val=True)
 
+        return control
+
+
+class LossLoggingCallback(TrainerCallback):
+    """Callback to log training loss to validation file."""
+
+    def __init__(self):
+        self.losses = []
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if logs and 'loss' in logs:
+            loss = logs['loss']
+            step = state.global_step
+            self.losses.append({'step': step, 'loss': loss})
+            log_val(f"step={step} loss={loss:.4f}")
         return control
 
 
@@ -253,17 +339,26 @@ def train_with_validation(args, cfg, model, tokenizer, train_data, training_dir,
         log(f"Baseline KorMedMCQA Accuracy: {baseline['accuracy']:.2f}% ({baseline['correct']}/{baseline['total']})", "INFO")
 
     # Create training arguments - checkpoints go to training_dir
+    # Save every 500 steps (~1.5-2.5h depending on speed) for frequent checkpointing
     training_args = create_training_args(
         output_dir=str(training_dir),  # Intermediate checkpoints here
         num_epochs=args.epochs,
         batch_size=cfg['batch'],
         grad_accum=cfg['grad_accum'],
         learning_rate=cfg['lr'],
-        max_length=cfg['max_length']
+        max_length=cfg['max_length'],
+        save_strategy="steps",
+        save_steps=500
     )
 
-    # Create callback for validation
+    # Create callbacks for validation and loss logging
     callbacks = []
+
+    # Loss logging callback (always active)
+    loss_callback = LossLoggingCallback()
+    callbacks.append(loss_callback)
+
+    # KorMedMCQA validation callback
     if test_data:
         val_callback = KorMedMCQAValidationCallback(
             tokenizer=tokenizer,
@@ -272,6 +367,8 @@ def train_with_validation(args, cfg, model, tokenizer, train_data, training_dir,
             results_list=validation_results
         )
         callbacks.append(val_callback)
+
+    log(f"Validation log file: {VAL_LOG_FILE}", "INFO")
 
     # Create trainer
     trainer = SFTTrainer(
@@ -284,7 +381,46 @@ def train_with_validation(args, cfg, model, tokenizer, train_data, training_dir,
 
     # Train
     log("Starting training...", "INFO")
-    trainer.train()
+
+    # Memory check mode: run just one step
+    if hasattr(args, 'memory_check') and args.memory_check:
+        log("=" * 60, "INFO")
+        log("MEMORY CHECK MODE: Running one training step only", "INFO")
+        log("=" * 60, "INFO")
+
+        # Override to run only 1 step
+        trainer.args.max_steps = 1
+        trainer.args.save_strategy = "no"
+        trainer.args.evaluation_strategy = "no"
+
+        # Train one step
+        trainer.train()
+
+        # Report memory usage
+        if torch.cuda.is_available():
+            allocated = torch.cuda.memory_allocated(0) / (1024**3)
+            reserved = torch.cuda.memory_reserved(0) / (1024**3)
+            max_allocated = torch.cuda.max_memory_allocated(0) / (1024**3)
+
+            log("=" * 60, "INFO")
+            log("MEMORY CHECK RESULTS", "INFO")
+            log("=" * 60, "INFO")
+            log(f"Current allocated: {allocated:.2f} GB", "INFO")
+            log(f"Current reserved: {reserved:.2f} GB", "INFO")
+            log(f"Peak allocated: {max_allocated:.2f} GB", "INFO")
+            log(f"GPU 0 total: 47.40 GB", "INFO")
+            log(f"Headroom: {47.40 - max_allocated:.2f} GB", "INFO")
+            log("=" * 60, "INFO")
+            log("Memory check complete! Training can proceed.", "INFO")
+
+        return None  # Exit without saving
+
+    # Resume from checkpoint if requested
+    if hasattr(args, 'resume') and args.resume:
+        log("Resuming from latest checkpoint...", "INFO")
+        trainer.train(resume_from_checkpoint=True)
+    else:
+        trainer.train()
 
     # Save final model to output_dir (model/00_trained/{model}/)
     log(f"Saving final model to: {output_dir}", "INFO")
@@ -333,6 +469,12 @@ def main():
                        help=f"Maximum token length (default: {DEFAULT_MAX_LENGTH})")
     parser.add_argument("--skip-validation", action="store_true",
                        help="Skip data validation at startup")
+    parser.add_argument("--tokenizer-path", type=str, default=None,
+                       help="Path to custom tokenizer (e.g., model/tokenizer/medgemma_ded_med_normal)")
+    parser.add_argument("--memory-check", action="store_true",
+                       help="Run one training step for memory check, then exit")
+    parser.add_argument("--resume", action="store_true",
+                       help="Resume training from latest checkpoint")
     args = parser.parse_args()
 
     # Setup directories
@@ -369,8 +511,25 @@ def main():
     cfg = {**cfg, 'max_length': args.max_length}
     log(f"Model config: {cfg}", "DEBUG")
 
-    # Load training data
-    train_data, val_data = load_jsonl_data(DATA_DIR, max_samples=args.max_samples)
+    # Load tokenizer FIRST (needed for dataset caching)
+    log("Loading tokenizer...", "INFO")
+    try:
+        if args.tokenizer_path:
+            from transformers import AutoTokenizer
+            tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, trust_remote_code=True)
+            log(f"Using custom tokenizer from: {args.tokenizer_path}", "INFO")
+        else:
+            tokenizer = load_tokenizer(model_path)
+    except:
+        # Fallback for HuggingFace models
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(cfg.get('path', model_path), trust_remote_code=True)
+
+    # Load training data (with caching)
+    log("Loading training data...", "INFO")
+    train_data, val_data = load_or_create_cached_dataset(
+        DATA_DIR, tokenizer, max_samples=args.max_samples, skip_cache=False
+    )
     if len(train_data) == 0:
         log(f"No training data found in: {DATA_DIR}", "ERROR")
         return 1
@@ -384,14 +543,6 @@ def main():
         log("\n" + "=" * 70, "INFO")
         log("STARTUP VALIDATION", "INFO")
         log("=" * 70, "INFO")
-
-        # Load tokenizer for validation
-        try:
-            tokenizer = load_tokenizer(model_path)
-        except:
-            # Fallback for HuggingFace models
-            from transformers import AutoTokenizer
-            tokenizer = AutoTokenizer.from_pretrained(cfg.get('path', model_path), trust_remote_code=True)
 
         # Validate training data (convert Dataset slice to list of dicts)
         sample_data = [train_data[i] for i in range(min(100, len(train_data)))]
@@ -414,9 +565,7 @@ def main():
         from peft import PeftModel, PeftConfig, prepare_model_for_kbit_training
         from transformers import AutoModelForCausalLM, BitsAndBytesConfig
         from training_config import MEMORY_CONFIGS
-
-        # Load tokenizer
-        tokenizer = load_tokenizer(model_path)
+        # tokenizer already loaded above
 
         # Get base model path from adapter config
         peft_config = PeftConfig.from_pretrained(model_path)
@@ -469,6 +618,13 @@ def main():
 
     # Train with validation
     final_dir = train_with_validation(args, cfg, model, tokenizer, train_data, training_dir, output_dir)
+
+    # If memory check mode, exit early
+    if final_dir is None:
+        log("=" * 70, "INFO")
+        log("MEMORY CHECK COMPLETE - No issues detected", "INFO")
+        log("=" * 70, "INFO")
+        return 0
 
     # Save training info
     save_training_info(output_dir, {

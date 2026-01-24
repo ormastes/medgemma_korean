@@ -1,9 +1,14 @@
 {
+  "special_chars": 31,
+  "dictionary_terms": 4670,
+  "train02_words": 10000,
+  "general_korean": 0,
+  "total_before_dedup": 14701,
+  "total_after_dedup": 14325,
+  "duplicates_removed": 376,
+  "base_model": "google/medgemma-4b-it",
   "original_vocab_size": 262145,
-  "new_vocab_size": 285844,
-  "tokens_added": 23699,
-  "dict_terms_count": 6072,
-  "train02_words_count": 19551,
-  "corpus_words_used": 0,
-  "tokenization_improvement": 1.2580645161290323
+  "new_vocab_size": 276172,
+  "tokens_actually_added": 14027,
+  "tokenization_improvement": 1.1126760563380282
 }

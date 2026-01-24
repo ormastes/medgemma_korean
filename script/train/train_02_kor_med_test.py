@@ -45,6 +45,9 @@ from training_utils import (
 )
 from training_config import MODEL_CONFIGS, MEMORY_CONFIGS
 from data_validation import validate_and_report, check_prompt_templates
+from _train_text_format import (
+    MCQ_TRAIN_TEMPLATE, MCQ_VALIDATE_TEMPLATE
+)
 from trl import SFTTrainer
 from transformers import TrainerCallback, AutoModelForCausalLM, BitsAndBytesConfig, TrainingArguments
 from peft import PeftModel, PeftConfig
@@ -119,108 +122,14 @@ def get_lora_paths(model_name: str) -> tuple:
 
 
 # =============================================================================
-# PROMPT TEMPLATES
+# PROMPT TEMPLATES (imported from _train_text_format.py)
 # =============================================================================
 
-# SIMPLE/NORMAL prompt (for NORMAL mode - after model learns reasoning format)
-SIMPLE_PROMPT_TEMPLATE = """<start_of_turn>user
-Reasoning 후 정답 알파벳 하나만 답하세요.
+# Training template - includes example + actual question with translate fields
+TRAINING_TEMPLATE = MCQ_TRAIN_TEMPLATE
 
-{question}
-A) {A}
-B) {B}
-C) {C}
-D) {D}
-E) {E}
-
-<end_of_turn>
-<start_of_turn>model
-<reasoning>
-{reasoning}
-</reasoning>{answer}<end_of_turn>"""
-
-# DETAILED/FULL prompt (for FULL mode - teaches reasoning format with example)
-DETAILED_PROMPT_TEMPLATE = """<start_of_turn>user
-Reasoning 후 정답 알파벳 하나만 답하세요.
-
-```format
-질문
-A) 선택지
-B) 선택지
-C) 선택지
-D) 선택지
-E) 선택지
-
-<reasoning> 블록 안에서 다음 단계로 분석하세요:
-첫째: 질문과 선택지를 영어로 다시 작성
-둘째: 질문을 명확하게 재정리
-셋째: 관련 의학 지식 나열
-넷째: 각 선택지 분석 및 확률
-A) 분석 xx%
-B) 분석 yy%
-C) 분석 zz%
-D) 분석 qq%
-E) 분석 rr%
-</reasoning>직후 정답 알파벳
-```
-
-```example
-12세 여아가 급성림프모구백혈병으로 진단받고, 항암화학요법 2일 째 소변양이 현저히
-감소하였다. 혈액검사결과는 다음과 같다. 조치는?
-혈색소 8.5 g/dL, 백혈구 185,000/mm^3, 혈소판 78,000/mm^3, 그물적혈구 0.8%,
-칼슘 6.9 mg/dL (참고치, 8.8~10.8), 인 8.2 mg/dL (참고치, 3.8~6.5),
-요산 15 mg/dL (참고치, <7), 나트륨 132 meq/L, 칼륨 6.1 meq/L, 염소 103 meq/L,
-혈액요소질소 58 mg/dL,  크레아티닌 2.4 mg/dL,  젖산탈수소효소(LDH) 1,800 U/L
-A) 혈액투석
-B) 칼슘 투여
-C) 적혈구 수혈
-D) 혈소판 수혈
-E) 항암화학요법 중단
-
-<reasoning>
-첫째: A 12-year-old girl diagnosed with acute lymphoblastic leukemia (ALL), day 2 of chemotherapy, with markedly decreased urine output. Labs: Hb 8.5, WBC 185,000, Plt 78,000, Ca 6.9 (low), P 8.2 (high), uric acid 15 (high), K 6.1 (high), BUN 58, Cr 2.4, LDH 1,800.
-A) Hemodialysis B) Calcium administration C) RBC transfusion D) Platelet transfusion E) Stop chemotherapy
-
-둘째: 항암치료 후 대량의 암세포 파괴로 인한 종양용해증후군(Tumor Lysis Syndrome, TLS)이 의심됨.
-
-셋째: 종양용해증후군(TLS)은 항암치료나 방사선 치료 후 암세포가 급격히 파괴되면서 세포 내 물질이 혈중으로 대량 방출되어 발생하는 종양학적 응급상황이다.
-
-넷째: 각 선택지 분석
-A) 혈액투석 - TLS로 인한 급성신부전과 생명위협적 고칼륨혈증의 적응증 85%
-B) 칼슘 투여 - 고인산혈증에서 칼슘-인 침착 유발하므로 금기 5%
-C) 적혈구 수혈 - Hb 8.5는 경도 빈혈, 현재 우선순위 아님 4%
-D) 혈소판 수혈 - 78,000은 출혈 없이 즉각 수혈 불필요 3%
-E) 항암화학요법 중단 - TLS 이미 발생, 중단해도 현재 위기 해결 불가 3%
-</reasoning>A
-```
-
-{question}
-A) {A}
-B) {B}
-C) {C}
-D) {D}
-E) {E}
-
-<end_of_turn>
-<start_of_turn>model
-<reasoning>
-{reasoning}
-</reasoning>{answer}<end_of_turn>"""
-
-# Validation prompt (no expected response)
-VALIDATION_PROMPT_TEMPLATE = """<start_of_turn>user
-Reasoning 후 정답 알파벳 하나만 답하세요.
-
-{question}
-A) {A}
-B) {B}
-C) {C}
-D) {D}
-E) {E}
-
-<end_of_turn>
-<start_of_turn>model
-"""
+# Validation template - includes example, no expected response
+VALIDATION_TEMPLATE = MCQ_VALIDATE_TEMPLATE
 
 
 # =============================================================================
@@ -236,68 +145,94 @@ def truncate_at_end_of_turn(response: str) -> str:
 
 def check_reasoning_format(text: str) -> float:
     """
-    Check if reasoning format is proper.
+    Check if reasoning format is proper (NEW STRUCTURED FORMAT).
     Returns a score from 0.0 to 1.0 based on format compliance.
+
+    Expected format:
+    reasoning:
+    facts:
+    - ...
+    candidates:
+    - ...
+    criteria:
+    - ...
+    analysis:
+    ...
+    evaluation:
+    - 평가기준: ...
+    - 점수표: ...
+    - 근거요약: ...
+    answer:
+    X
     """
     score = 0.0
     total_checks = 0
 
-    # Check: <reasoning> and </reasoning> exist and in correct order
-    total_checks += 1
-    reasoning_start = text.find('<reasoning>')
-    reasoning_end = text.find('</reasoning>')
+    # Required keywords in order
+    required_keywords = [
+        'reasoning:',
+        'facts:',
+        'candidates:',
+        'criteria:',
+        'analysis:',
+        'evaluation:',
+        'answer:'
+    ]
 
-    if reasoning_start == -1 or reasoning_end == -1 or reasoning_start >= reasoning_end:
-        return 0.0
-
-    reasoning_content = text[reasoning_start + len('<reasoning>'):reasoning_end]
-    score += 1.0
-
-    # Keywords to check
-    keyword_list = ['첫째:', '둘째:', '셋째:', '넷째:', 'A)', 'B)', 'C)', 'D)', 'E)']
-    selection_list = ['A)', 'B)', 'C)', 'D)', 'E)']
-
-    for keyword in keyword_list:
+    # Check: All required keywords exist
+    for keyword in required_keywords:
         total_checks += 1
-        keyword_pos = reasoning_content.find(keyword)
-        if keyword_pos == -1:
-            continue
+        if keyword in text:
+            score += 1.0
 
-        content_start = keyword_pos + len(keyword)
-        content_end = len(reasoning_content)
+    # Check: evaluation has Korean sub-fields
+    total_checks += 3
+    if '평가기준:' in text:
+        score += 1.0
+    if '점수표:' in text:
+        score += 1.0
+    if '근거요약:' in text:
+        score += 1.0
 
-        for next_kw in keyword_list:
-            next_pos = reasoning_content.find(next_kw, content_start)
-            if next_pos != -1 and next_pos < content_end:
-                content_end = next_pos
+    # Check: answer is at the end and is a single letter
+    total_checks += 1
+    answer_match = re.search(r'answer:\s*([A-E])\s*$', text.strip(), re.MULTILINE)
+    if answer_match:
+        score += 1.0
 
-        content = reasoning_content[content_start:content_end].strip()
-        words = content.split()
+    # Check: facts has bullet points
+    total_checks += 1
+    facts_section = re.search(r'facts:(.*?)(?:candidates:|$)', text, re.DOTALL)
+    if facts_section and '-' in facts_section.group(1):
+        score += 1.0
 
-        if len(words) < 3:
-            continue
+    # Check: candidates has A, B, C, D, E
+    total_checks += 1
+    candidates_section = re.search(r'candidates:(.*?)(?:criteria:|$)', text, re.DOTALL)
+    if candidates_section:
+        cand_text = candidates_section.group(1)
+        if 'A' in cand_text and 'B' in cand_text and 'E' in cand_text:
+            score += 1.0
 
-        if keyword in selection_list:
-            if not re.search(r'\d+%', content):
-                continue
-
+    # Check: 점수표 has percentages
+    total_checks += 1
+    if '점수표:' in text and re.search(r'\d+%', text):
         score += 1.0
 
     return score / total_checks if total_checks > 0 else 0.0
 
 
 def check_correctness(response: str, expected_answer: str) -> tuple:
-    """Check if the predicted answer matches the expected answer."""
+    """Check if the predicted answer matches the expected answer (NEW FORMAT)."""
     response = truncate_at_end_of_turn(response)
     predicted = ""
 
-    if "</reasoning>" in response:
-        after_reasoning = response.split("</reasoning>")[-1].strip()
-        for char in after_reasoning:
-            if char.upper() in 'ABCDE':
-                predicted = char.upper()
-                break
+    # Try to find answer after "answer:" keyword
+    answer_match = re.search(r'answer:\s*([A-E])', response, re.IGNORECASE | re.MULTILINE)
+    if answer_match:
+        predicted = answer_match.group(1).upper()
     else:
+        # Fallback: look for last occurrence of A-E letter
         clean_response = response.strip()
         if clean_response:
             for char in reversed(clean_response):
@@ -333,71 +268,155 @@ def calc_score(response: str, expected_answer: str) -> dict:
 # DATA LOADING
 # =============================================================================
 
+def get_translate_fields(sample: dict) -> dict:
+    """Get translate fields from sample, with fallbacks if missing."""
+    return {
+        'translate_question': sample.get('translate_question', '(translation pending)'),
+        'translate_A': sample.get('translate_A', sample.get('A', '')),
+        'translate_B': sample.get('translate_B', sample.get('B', '')),
+        'translate_C': sample.get('translate_C', sample.get('C', '')),
+        'translate_D': sample.get('translate_D', sample.get('D', '')),
+        'translate_E': sample.get('translate_E', sample.get('E', '')),
+    }
+
+
 def generate_simple_reasoning(sample: dict) -> str:
-    """Generate simple reasoning for training."""
+    """Generate simple reasoning for training (structured format)."""
     answer = sample['answer']
     choices = {'A': sample['A'], 'B': sample['B'], 'C': sample['C'],
                'D': sample['D'], 'E': sample['E']}
 
-    lines = []
-    for choice, text in choices.items():
+    # Build evaluation scores
+    score_parts = []
+    reason_parts = []
+    for choice in ['A', 'B', 'C', 'D', 'E']:
         if choice == answer:
-            lines.append(f"{choice}) {text[:50]}... - 정답 90%")
+            score_parts.append(f"{choice}=90%")
+            reason_parts.append(f"{choice}(정답으로 판단됨)")
         else:
-            lines.append(f"{choice}) {text[:30]}... - 5%")
+            score_parts.append(f"{choice}=2%")
+            reason_parts.append(f"{choice}(오답)")
 
-    return "\n".join(lines)
+    reasoning = f"""facts:
+- Medical knowledge required
+candidates:
+- A, B, C, D, E
+criteria:
+- Medical accuracy
+- Evidence-based
+analysis:
+Based on medical evidence.
+evaluation:
+- 평가기준: 의학적 정확성
+- 점수표: {', '.join(score_parts)}
+- 근거요약: {'; '.join(reason_parts)}"""
+
+    return reasoning
 
 
 def generate_detailed_reasoning(sample: dict) -> str:
-    """Generate detailed reasoning for FULL mode training."""
+    """Generate detailed reasoning for FULL mode training (structured format)."""
     answer = sample['answer']
     question = sample['question']
     choices = {'A': sample['A'], 'B': sample['B'], 'C': sample['C'],
                'D': sample['D'], 'E': sample['E']}
 
-    reasoning = f"""첫째: {question[:100]}...
-A) {choices['A'][:30]} B) {choices['B'][:30]} C) {choices['C'][:30]} D) {choices['D'][:30]} E) {choices['E'][:30]}
-
-둘째: 이 문제는 의학적 지식을 묻는 문제입니다.
-
-셋째: 관련 의학 지식을 바탕으로 각 선택지를 분석합니다.
-
-넷째: 각 선택지 분석"""
-
-    for choice, text in choices.items():
+    # Build evaluation scores
+    score_parts = []
+    reason_parts = []
+    for choice in ['A', 'B', 'C', 'D', 'E']:
+        text = choices[choice]
         if choice == answer:
-            reasoning += f"\n{choice}) {text[:50]}... - 정답으로 판단됨 85%"
+            score_parts.append(f"{choice}=85%")
+            reason_parts.append(f"{choice}({text[:40]}... - 정답으로 판단됨)")
         else:
-            reasoning += f"\n{choice}) {text[:30]}... - 오답 5%"
+            score_parts.append(f"{choice}=4%")
+            reason_parts.append(f"{choice}({text[:30]}... - 오답)")
+
+    reasoning = f"""facts:
+- {question[:100]}...
+- Medical knowledge analysis required
+candidates:
+- A, B, C, D, E
+criteria:
+- Medical accuracy
+- Clinical relevance
+- Evidence-based guidelines
+analysis:
+This question requires medical knowledge. Each choice analyzed based on medical evidence and clinical guidelines.
+evaluation:
+- 평가기준: 의학적 정확성, 임상적 연관성, 가이드라인 부합
+- 점수표: {', '.join(score_parts)}
+- 근거요약: {'; '.join(reason_parts)}"""
 
     return reasoning
 
 
-def format_mcq_full_mode(sample: dict) -> dict:
-    """Format MCQ for FULL mode (detailed prompt with example)."""
-    reasoning = generate_detailed_reasoning(sample)
-    text = DETAILED_PROMPT_TEMPLATE.format(
+def generate_model_response(sample: dict, detailed: bool = False) -> str:
+    """
+    Generate expected model response for training.
+
+    Format:
+    {translate}
+    reasoning:
+    {reasoning}
+    answer:
+    {answer}
+    """
+    translate_fields = get_translate_fields(sample)
+    reasoning = generate_detailed_reasoning(sample) if detailed else generate_simple_reasoning(sample)
+    answer = sample['answer']
+
+    # Build translate block
+    translate_text = f"""{translate_fields['translate_question']}
+A) {translate_fields['translate_A']}
+B) {translate_fields['translate_B']}
+C) {translate_fields['translate_C']}
+D) {translate_fields['translate_D']}
+E) {translate_fields['translate_E']}"""
+
+    return f"""{translate_text}
+reasoning:
+{reasoning}
+answer:
+{answer}<end_of_turn>"""
+
+
+def format_mcq_training(sample: dict, detailed: bool = False) -> dict:
+    """
+    Format MCQ for training using MCQ_TRAIN_TEMPLATE.
+
+    The template includes an example with full reasoning, then the actual question.
+    Template now ends with {answer}<end_of_turn> - no need to append response.
+    """
+    translate_fields = get_translate_fields(sample)
+
+    # Format template - includes example + question + answer
+    # Template already ends with {answer}<end_of_turn>
+    text = TRAINING_TEMPLATE.format(
         question=sample['question'],
         A=sample['A'], B=sample['B'], C=sample['C'],
         D=sample['D'], E=sample['E'],
-        reasoning=reasoning,
-        answer=sample['answer']
+        translate_question=translate_fields['translate_question'],
+        translate_A=translate_fields['translate_A'],
+        translate_B=translate_fields['translate_B'],
+        translate_C=translate_fields['translate_C'],
+        translate_D=translate_fields['translate_D'],
+        translate_E=translate_fields['translate_E'],
+        answer=sample['answer'],  # Template ends with {answer}<end_of_turn>
     )
-    return {"text": text, "answer": sample['answer'], "mode": "full"}
+
+    return {"text": text, "answer": sample['answer'], "detailed": detailed}
+
+
+def format_mcq_full_mode(sample: dict) -> dict:
+    """Format MCQ for FULL mode (detailed reasoning)."""
+    return format_mcq_training(sample, detailed=True)
 
 
 def format_mcq_normal_mode(sample: dict) -> dict:
-    """Format MCQ for NORMAL mode (simple prompt)."""
-    reasoning = generate_simple_reasoning(sample)
-    text = SIMPLE_PROMPT_TEMPLATE.format(
-        question=sample['question'],
-        A=sample['A'], B=sample['B'], C=sample['C'],
-        D=sample['D'], E=sample['E'],
-        reasoning=reasoning,
-        answer=sample['answer']
-    )
-    return {"text": text, "answer": sample['answer'], "mode": "normal"}
+    """Format MCQ for NORMAL mode (simple reasoning)."""
+    return format_mcq_training(sample, detailed=False)
 
 
 def load_mcq_data(data_dir: Path, max_samples: int = None) -> list:
@@ -511,10 +530,14 @@ class ModeAwareTrainer:
 
         with torch.no_grad():
             for sample in samples:
-                prompt = VALIDATION_PROMPT_TEMPLATE.format(
+                # Get translate fields (use placeholders if missing in validation data)
+                translate_fields = get_translate_fields(sample)
+
+                # Format prompt using VALIDATION_TEMPLATE (no expected response)
+                prompt = VALIDATION_TEMPLATE.format(
                     question=sample['question'],
                     A=sample['A'], B=sample['B'], C=sample['C'],
-                    D=sample['D'], E=sample['E']
+                    D=sample['D'], E=sample['E'],
                 )
                 expected = sample['answer']
 
@@ -731,7 +754,7 @@ def main():
 
     # Load tokenizer first for validation
     log("Loading tokenizer...", "INFO")
-    tokenizer = load_tokenizer(model_path)
+    tokenizer = load_tokenizer(lora_1_path)
 
     # ==========================================================================
     # DATA VALIDATION AT STARTUP
@@ -744,37 +767,37 @@ def main():
         # Check prompt template lengths
         sample_data = mcq_data[0] if mcq_data else None
         if sample_data:
-            sample_with_reasoning = {
+            translate_fields = get_translate_fields(sample_data)
+            sample_with_translate = {
                 **sample_data,
-                'reasoning': generate_detailed_reasoning(sample_data)
+                **translate_fields,
             }
 
             check_prompt_templates(
                 {
-                    "DETAILED (FULL mode)": DETAILED_PROMPT_TEMPLATE,
-                    "SIMPLE (NORMAL mode)": SIMPLE_PROMPT_TEMPLATE,
-                    "VALIDATION": VALIDATION_PROMPT_TEMPLATE,
+                    "TRAINING": TRAINING_TEMPLATE,
+                    "VALIDATION": VALIDATION_TEMPLATE,
                 },
                 tokenizer,
                 args.max_length,
-                sample_with_reasoning,
+                sample_with_translate,
                 log_fn=lambda msg: log(msg, "INFO")
             )
 
         # Format samples and check data lengths
-        log("Checking FULL mode data...", "INFO")
-        full_samples = [format_mcq_full_mode(s) for s in mcq_data[:100]]
+        log("Checking training data (detailed mode)...", "INFO")
+        detailed_samples = [format_mcq_full_mode(s) for s in mcq_data[:100]]
         validate_and_report(
-            full_samples, tokenizer, args.max_length,
-            "FULL mode samples (first 100)",
+            detailed_samples, tokenizer, args.max_length,
+            "Training samples - detailed (first 100)",
             log_fn=lambda msg: log(msg, "INFO")
         )
 
-        log("Checking NORMAL mode data...", "INFO")
-        normal_samples = [format_mcq_normal_mode(s) for s in mcq_data[:100]]
+        log("Checking training data (simple mode)...", "INFO")
+        simple_samples = [format_mcq_normal_mode(s) for s in mcq_data[:100]]
         validate_and_report(
-            normal_samples, tokenizer, args.max_length,
-            "NORMAL mode samples (first 100)",
+            simple_samples, tokenizer, args.max_length,
+            "Training samples - simple (first 100)",
             log_fn=lambda msg: log(msg, "INFO")
         )
 
@@ -908,7 +931,7 @@ def main():
     save_training_info(output_dir, {
         "script": "train_02_kor_med_test",
         "model": args.model,
-        "base_model": model_path,
+        "base_model": base_model_path,
         "epochs": args.epochs,
         "max_length": args.max_length,
         "full_samples": args.full_samples,

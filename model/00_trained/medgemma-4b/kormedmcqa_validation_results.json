@@ -1,21 +1,14 @@
 {
   "validation_results": [
     {
-      "accuracy": 21.192052980132452,
-      "correct": 128,
+      "accuracy": 17.880794701986755,
+      "correct": 108,
       "total": 604,
       "epoch": 0,
       "step": 0
-    },
-    {
-      "accuracy": 19.039735099337747,
-      "correct": 115,
-      "total": 604,
-      "epoch": 1,
-      "step": 26665
     }
   ],
-  "baseline_accuracy": 21.192052980132452,
-  "final_accuracy": 19.039735099337747,
-  "total_change": -2.1523178807947048
+  "baseline_accuracy": 17.880794701986755,
+  "final_accuracy": 17.880794701986755,
+  "total_change": 0.0
 }

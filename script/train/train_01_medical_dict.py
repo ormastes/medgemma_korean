@@ -31,8 +31,9 @@ from training_utils import (
     create_base_parser, load_tokenizer,
     create_training_args, save_training_info
 )
-from training_config import MODEL_CONFIGS
+from training_config import MODEL_CONFIGS, LORA_TARGET_MODULES
 from data_validation import validate_and_report, check_prompt_templates
+from _train_text_format import DICT_TRAIN_TEMPLATE, MCQ_VALIDATION_TEMPLATE
 from trl import SFTTrainer
 from transformers import TrainerCallback, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import PeftModel, PeftConfig, get_peft_model, LoraConfig
@@ -56,26 +57,9 @@ LOG_FILE = TRAINING_DIR / "train_01_debug.log"
 # Default max length
 DEFAULT_MAX_LENGTH = 256
 
-# Training prompt template (includes expected response for SFT)
-PROMPT_TEMPLATE = """<start_of_turn>user
-Meaning of word {term}:<end_of_turn>
-<start_of_turn>model
-{definition}<end_of_turn>"""
-
-# Validation prompt template (KorMedMCQA)
-VALIDATION_PROMPT_TEMPLATE = """<start_of_turn>user
-Reasoning 후 정답 알파벳 하나만 답하세요.
-
-{question}
-A) {A}
-B) {B}
-C) {C}
-D) {D}
-E) {E}
-
-<end_of_turn>
-<start_of_turn>model
-"""
+# Templates imported from _train_text_format.py
+PROMPT_TEMPLATE = DICT_TRAIN_TEMPLATE
+VALIDATION_PROMPT_TEMPLATE = MCQ_VALIDATION_TEMPLATE
 
 
 def log(msg: str, level: str = "INFO"):
@@ -333,11 +317,12 @@ def merge_and_add_new_lora(model_path: str, output_path: str, cfg: dict):
 
     # Add new LoRA
     log("Adding new LoRA adapter...", "INFO")
+    # Use attention-only LoRA (9.2M params @ r=16) instead of full LoRA (120M params @ r=64)
+    # This is 13x smaller and follows research/00__lora_size_calc.md recommendations
     new_lora_config = LoraConfig(
         r=cfg['lora_r'],
         lora_alpha=cfg['lora_alpha'],
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                       "gate_proj", "up_proj", "down_proj"],
+        target_modules=LORA_TARGET_MODULES,  # Attention-only (Q/K/V/O)
         lora_dropout=0.05,
         bias="none",
         task_type="CAUSAL_LM"

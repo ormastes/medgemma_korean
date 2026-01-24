@@ -1,0 +1,9 @@
+{
+  "variant": "medgemma_ded_medical (Dedicated + Medical BPE)",
+  "base_model": "google/medgemma-4b-it",
+  "original_vocab_size": 262145,
+  "new_vocab_size": 272843,
+  "tokens_added": 10698,
+  "candidate_tokens": 12294,
+  "already_existed": 1596
+}

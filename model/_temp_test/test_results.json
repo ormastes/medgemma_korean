@@ -1,0 +1,23 @@
+{
+  "train_00": {
+    "loss_decreased": true,
+    "first_loss": 10.936501502990723,
+    "last_loss": 8.374834060668945,
+    "trainable_params": 11898880,
+    "lora_modules": 434
+  },
+  "train_01": {
+    "loss_decreased": true,
+    "first_loss": 7.550436019897461,
+    "last_loss": 6.472411155700684,
+    "trainable_params": 11898880,
+    "lora_modules": 434
+  },
+  "train_02": {
+    "loss_decreased": false,
+    "first_loss": 6.2805705070495605,
+    "last_loss": 6.392037391662598,
+    "trainable_params": 11898880,
+    "lora_modules": 434
+  }
+}

@@ -7,8 +7,9 @@ Shared training configurations for all model types
 MODEL_CONFIGS = {
     "medgemma-4b": {
         "path": "google/medgemma-4b-it",
-        "lora_r": 64,
-        "lora_alpha": 128,
+        "lora_r": 16,        # Per research/00__lora_size_calc.md: r=16 → ~9.2M params
+        "lora_alpha": 32,    # alpha = 2 * r (standard practice)
+        "use_rslora": True,  # Rank-stabilized LoRA for better training
         "lr": 1e-4,
         "batch": 2,          # 32-bit training on A6000 (48GB)
         "grad_accum": 16,    # Effective batch size = 32
@@ -16,8 +17,9 @@ MODEL_CONFIGS = {
     },
     "medgemma-27b": {
         "path": "google/medgemma-27b-text-it",
-        "lora_r": 64,
-        "lora_alpha": 128,
+        "lora_r": 16,        # Per research/00__lora_size_calc.md: r=8 or r=16
+        "lora_alpha": 32,    # alpha = 2 * r
+        "use_rslora": True,  # Rank-stabilized LoRA
         "lr": 1e-4,
         "batch": 2,
         "grad_accum": 16,
@@ -40,15 +42,26 @@ MAX_LENGTHS = {
     }
 }
 
-# LoRA target modules (common for all models)
+# LoRA target modules (attention-only, per research/00__lora_size_calc.md)
+# Attention projections only (Q/K/V/O): ~9.2M params @ r=16
+# Removed MLP projections (gate/up/down) to match research recommendations
 LORA_TARGET_MODULES = [
+    "q_proj",   # Query projection
+    "k_proj",   # Key projection
+    "v_proj",   # Value projection
+    "o_proj",   # Output projection
+]
+
+# Full target modules (attention + MLP) - NOT RECOMMENDED
+# This creates 13x more parameters than needed
+LORA_TARGET_MODULES_FULL = [
     "q_proj",
     "k_proj",
     "v_proj",
     "o_proj",
-    "gate_proj",
-    "up_proj",
-    "down_proj"
+    "gate_proj",  # MLP
+    "up_proj",    # MLP
+    "down_proj"   # MLP
 ]
 
 # Training defaults
@@ -65,13 +78,14 @@ TRAINING_DEFAULTS = {
 }
 
 # Memory optimization settings per model
+# Updated for r=16 attention-only LoRA (9.2M params vs previous 120M)
 # Measured at max_len=1024 on RTX A6000 (47.4 GB)
 MEMORY_CONFIGS = {
     "medgemma-4b": {
         "use_gradient_checkpointing": True,   # Required with extended tokenizer embeddings
         "train_embeddings": True,              # Train extended Korean embeddings
-        "peak_memory_gb": 44.0,               # With extended embeddings (1.59B trainable)
-        "remaining_gb": 3.4,                  # Tight, use gradient checkpointing
+        "peak_memory_gb": 42.0,               # Reduced from 44GB (smaller LoRA)
+        "remaining_gb": 5.4,                  # Better headroom with r=16
     },
     "medgemma-27b": {
         "use_gradient_checkpointing": True,   # Required for training

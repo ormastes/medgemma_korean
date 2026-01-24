@@ -32,18 +32,18 @@
   "rank_pattern": {},
   "revision": null,
   "target_modules": [
-    "up_proj",
     "gate_proj",
-    "down_proj",
+    "up_proj",
     "o_proj",
-    "k_proj",
+    "v_proj",
     "q_proj",
-    "v_proj"
+    "k_proj",
+    "down_proj"
   ],
   "target_parameters": null,
   "task_type": "CAUSAL_LM",
   "trainable_token_indices": null,
   "use_dora": false,
   "use_qalora": false,
-  "use_rslora": true
+  "use_rslora": false
 }

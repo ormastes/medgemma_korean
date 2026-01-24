@@ -1,9 +1,9 @@
 {
   "script": "train_00_plain_text",
   "model": "medgemma-4b",
-  "base_model": "/home/ormastes/dev/pub/medgemma_korean/model/raw_lora_added/medgemma-4b",
+  "base_model": "model/00_training/medgemma-4b/checkpoint-3500",
   "epochs": 1,
-  "train_samples": 1706539,
+  "train_samples": 50000,
   "val_samples": 0,
   "training_dir": "/home/ormastes/dev/pub/medgemma_korean/model/00_training/medgemma-4b",
   "output_dir": "/home/ormastes/dev/pub/medgemma_korean/model/00_trained/medgemma-4b",

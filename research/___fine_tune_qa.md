@@ -369,4 +369,3 @@ Teach the rules with minimal output: only question:\n and short_answer:\n.
 
 ---
 
-If you want, I can generate an additional batch of **“question about each item”** that goes deeper (e.g., edge cases: missing options, ambiguous answer_type, CRLF vs LF normalization, validator rules, illegal characters) while keeping every sample strictly in `question:\n + short_answer:\n` form.

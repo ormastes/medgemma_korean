@@ -62,6 +62,11 @@ D) 중탄산나트륨을 모든 경우에 즉시 투여한다
 E) 칼륨은 절대 보충하지 않는다
 translate:\n
 Which initial management is most appropriate for DKA?
+A) Administer glucose solution first
+B) Start insulin IV first, fluids later
+C) Start fluids with 0.9% normal saline first
+D) Give sodium bicarbonate immediately in all cases
+E) Never supplement potassium
 answer_type:\n
 select_A_E
 remind:\n
@@ -91,9 +96,21 @@ C
 
 ```
 question:\n
-다음 임상 상황의 위험도를 1~5로 평가하시오: 경미한 증상, 활력징후 안정, 경고증상 없음, 일상생활 가능.
+다음 임상 상황의 위험도를 1~5로 평가하시오.
+1) 매우 낮음 - 즉각적 조치 불필요
+2) 낮음 - 외래 경과 관찰
+3) 중등도 - 추가 검사 필요
+4) 높음 - 긴급 처치 필요
+5) 매우 높음 - 즉각적 응급 처치 필요
+임상 상황: 경미한 증상, 활력징후 안정, 경고증상 없음, 일상생활 가능.
 translate:\n
-Rate risk from 1 to 5: mild symptoms, stable vitals, no red flags, able to perform daily activities.
+Rate the risk level of the following clinical situation from 1 to 5.
+1) Very low - No immediate action needed
+2) Low - Outpatient follow-up
+3) Moderate - Further evaluation needed
+4) High - Urgent intervention required
+5) Very high - Immediate emergency care required
+Clinical situation: mild symptoms, stable vitals, no red flags, able to perform daily activities.
 answer_type:\n
 select_1_5
 remind:\n
@@ -181,5 +198,3 @@ answer:\n
 ```
 
 ---
-
-If you want, I can give you a **strict validator** (regex + scoring-table parser rules) for `evaluation:\n` so your dataset builder can automatically reject any sample missing (a) all options, (b) points, or (c) Korean-only evaluation text.

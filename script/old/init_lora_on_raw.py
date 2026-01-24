@@ -143,6 +143,8 @@ def main():
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--extended-tokenizer", action="store_true",
                        help="Use extended Korean tokenizer (run build_korean_tokenizer.py first)")
+    parser.add_argument("--tokenizer-path", type=str, default=None,
+                       help="Path to specific tokenizer variant (e.g., model/tokenizer/medgemma_ded_med_normal)")
     args = parser.parse_args()
 
     cfg = MODEL_CONFIGS[args.model]
@@ -158,10 +160,22 @@ def main():
     log(f"Raw model: {model_path}")
     log(f"Output: {output_dir}")
     log(f"Extended tokenizer: {args.extended_tokenizer}")
+    log(f"Tokenizer path: {args.tokenizer_path}")
 
     # Load tokenizer
     token_mapping = {}
-    if args.extended_tokenizer:
+    if args.tokenizer_path:
+        log(f"Loading tokenizer from: {args.tokenizer_path}...")
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, trust_remote_code=True)
+        # Get stats if available
+        stats_file = Path(args.tokenizer_path).parent / f"{Path(args.tokenizer_path).name}_stats.json"
+        if stats_file.exists():
+            with open(stats_file, 'r') as f:
+                stats = json.load(f)
+            log(f"  Variant: {stats.get('variant', 'Unknown')}")
+            log(f"  Vocab size: {stats.get('new_vocab_size', len(tokenizer))}")
+    elif args.extended_tokenizer:
         log("Loading extended Korean tokenizer (shared)...")
         tokenizer, token_mapping = load_extended_tokenizer()
     else:
@@ -173,17 +187,26 @@ def main():
     model = load_model_8bit(model_path, device=args.device)
 
     # Resize embeddings if using extended tokenizer
-    if args.extended_tokenizer and token_mapping:
+    if (args.extended_tokenizer or args.tokenizer_path) and token_mapping:
         log("Resizing model embeddings for extended tokenizer...")
         model = resize_model_embeddings(model, tokenizer, token_mapping)
+    elif args.tokenizer_path:
+        # Resize without token mapping
+        log("Resizing model embeddings for custom tokenizer...")
+        original_vocab = 262208  # MedGemma base vocab
+        new_vocab = len(tokenizer)
+        if new_vocab > original_vocab:
+            log(f"  Resizing: {original_vocab} -> {new_vocab}")
+            model.resize_token_embeddings(new_vocab)
 
     # Create LoRA config (include embeddings for continued pretraining)
     log("Creating LoRA config...")
+    use_rslora = cfg.get('use_rslora', True)
     lora_config = create_lora_config(
         lora_r=cfg['lora_r'],
         lora_alpha=cfg['lora_alpha'],
         include_embeddings=True,
-        use_rslora=True
+        use_rslora=use_rslora
     )
 
     # Add LoRA to model
@@ -204,9 +227,11 @@ def main():
         "lora_r": cfg['lora_r'],
         "lora_alpha": cfg['lora_alpha'],
         "include_embeddings": True,
-        "use_rslora": True,
+        "use_rslora": cfg.get('use_rslora', True),
         "extended_tokenizer": args.extended_tokenizer,
+        "tokenizer_path": args.tokenizer_path,
         "new_tokens_count": len(token_mapping.get('new_tokens', [])) if token_mapping else 0,
+        "vocab_size": len(tokenizer),
         "status": "initialized_not_trained"
     }
 
