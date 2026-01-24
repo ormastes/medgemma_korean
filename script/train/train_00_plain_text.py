@@ -263,23 +263,26 @@ def evaluate_kormedmcqa(model, tokenizer, test_data: list, device: str,
 
 
 class KorMedMCQAValidationCallback(TrainerCallback):
-    """Callback to validate on KorMedMCQA after each epoch with format scoring."""
+    """Callback to validate on KorMedMCQA after each epoch AND every N steps."""
 
-    def __init__(self, tokenizer, test_data, device, results_list):
+    def __init__(self, tokenizer, test_data, device, results_list, val_steps=500):
         self.tokenizer = tokenizer
         self.test_data = test_data
         self.device = device
         self.results_list = results_list
         self.current_epoch = 0
+        self.val_steps = val_steps  # Validate every N steps
+        self.last_val_step = 0  # Track last validation step
 
-    def on_epoch_end(self, args, state, control, model=None, **kwargs):
-        self.current_epoch += 1
-        log(f"Epoch {self.current_epoch} completed - Running KorMedMCQA validation...", "INFO")
-        log_val(f"=== Epoch {self.current_epoch} Validation ===")
+    def _run_validation(self, model, state, trigger: str):
+        """Run validation and log results."""
+        log(f"[{trigger}] Step {state.global_step} - Running KorMedMCQA validation...", "INFO")
+        log_val(f"=== {trigger} (Step {state.global_step}) Validation ===")
 
-        result = evaluate_kormedmcqa(model, self.tokenizer, self.test_data, self.device, log_details=True)
-        result["epoch"] = self.current_epoch
+        result = evaluate_kormedmcqa(model, self.tokenizer, self.test_data, self.device, log_details=False)
+        result["epoch"] = state.epoch
         result["step"] = state.global_step
+        result["trigger"] = trigger
         self.results_list.append(result)
 
         # Log accuracy
@@ -287,7 +290,6 @@ class KorMedMCQAValidationCallback(TrainerCallback):
 
         # Log format scores
         log(f"Format Valid: {result['format_valid_count']}/{result['total']} ({result['format_valid_rate']:.1f}%)", "INFO", to_val=True)
-        log(f"Avg Format Score: {result['avg_format_score']:.3f}", "INFO", to_val=True)
         log(f"Avg Total Score: {result['avg_total_score']:.3f}", "INFO", to_val=True)
 
         if len(self.results_list) > 1:
@@ -296,6 +298,19 @@ class KorMedMCQAValidationCallback(TrainerCallback):
             symbol = "+" if change >= 0 else ""
             log(f"Change from previous: {symbol}{change:.2f}%", "INFO", to_val=True)
 
+        self.last_val_step = state.global_step
+
+    def on_step_end(self, args, state, control, model=None, **kwargs):
+        """Validate every val_steps steps."""
+        if self.val_steps > 0:
+            steps_since_last = state.global_step - self.last_val_step
+            if steps_since_last >= self.val_steps:
+                self._run_validation(model, state, f"Step {state.global_step}")
+        return control
+
+    def on_epoch_end(self, args, state, control, model=None, **kwargs):
+        self.current_epoch += 1
+        self._run_validation(model, state, f"Epoch {self.current_epoch}")
         return control
 
 
@@ -358,15 +373,18 @@ def train_with_validation(args, cfg, model, tokenizer, train_data, training_dir,
     loss_callback = LossLoggingCallback()
     callbacks.append(loss_callback)
 
-    # KorMedMCQA validation callback
+    # KorMedMCQA validation callback (step-based + epoch-based)
     if test_data:
+        val_steps = getattr(args, 'val_steps', 500)
         val_callback = KorMedMCQAValidationCallback(
             tokenizer=tokenizer,
             test_data=test_data,
             device=args.device,
-            results_list=validation_results
+            results_list=validation_results,
+            val_steps=val_steps
         )
         callbacks.append(val_callback)
+        log(f"KorMedMCQA validation: every {val_steps} steps + each epoch", "INFO")
 
     log(f"Validation log file: {VAL_LOG_FILE}", "INFO")
 
@@ -463,8 +481,10 @@ def train_with_validation(args, cfg, model, tokenizer, train_data, training_dir,
 
 def main():
     parser = create_base_parser("Train 00: Plain Text Pre-training with Validation")
-    parser.add_argument("--val-samples", type=int, default=None,
-                       help="Limit validation samples (default: use all 604)")
+    parser.add_argument("--val-samples", type=int, default=100,
+                       help="Limit validation samples (default: 100)")
+    parser.add_argument("--val-steps", type=int, default=500,
+                       help="Run KorMedMCQA validation every N steps (default: 500, 0=disable)")
     parser.add_argument("--max-length", type=int, default=DEFAULT_MAX_LENGTH,
                        help=f"Maximum token length (default: {DEFAULT_MAX_LENGTH})")
     parser.add_argument("--skip-validation", action="store_true",
